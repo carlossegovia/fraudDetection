@@ -1,0 +1,17 @@
+/target/
+/target/*
+/test-output/*
+.project
+.classpath
+/.settings/*
+/bin/*
+/jboss.server.log.dir_IS_UNDEFINED/*
+*.class
+*.jar
+/tmp/*
+/target
+.tern-project
+.springBeans
+*.iml
+.idea/
+
