@@ -12,7 +12,6 @@ import org.apache.spark.mllib.classification.NaiveBayes;
 import org.apache.spark.mllib.classification.NaiveBayesModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
-// $example off$
 import org.apache.spark.SparkConf;
 
 public class NaiveBayesExample {
@@ -20,8 +19,12 @@ public class NaiveBayesExample {
     public static void main(String[] args) {
         SparkConf sparkConf = new SparkConf().setAppName("JavaNaiveBayesExample");
         JavaSparkContext jsc = new JavaSparkContext(sparkConf);
-        // $example on$
-        String path = "data/mllib/sample_libsvm_data.txt";
+        String path = null;
+        if (args != null && args.length > 0) {
+            path = args[0];
+        } else {
+            path = "data/mllib/sample_libsvm_data.txt";
+        }
         JavaRDD<LabeledPoint> inputData = MLUtils.loadLibSVMFile(jsc.sc(), path).toJavaRDD();
         JavaRDD<LabeledPoint>[] tmp = inputData.randomSplit(new double[]{0.6, 0.4});
         JavaRDD<LabeledPoint> training = tmp[0]; // training set
@@ -36,6 +39,7 @@ public class NaiveBayesExample {
         model.save(jsc.sc(), "target/tmp/myNaiveBayesModel");
         NaiveBayesModel sameModel = NaiveBayesModel.load(jsc.sc(), "target/tmp/myNaiveBayesModel");
         // $example off$
+        System.out.print(String.format("The accuracy is %s", accuracy));
 
         jsc.stop();
     }

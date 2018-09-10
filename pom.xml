@@ -6,7 +6,7 @@
 
     <groupId>tesis</groupId>
     <artifactId>fraudDetection</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
 
     <properties>
         <!-- other plug-in versions -->
