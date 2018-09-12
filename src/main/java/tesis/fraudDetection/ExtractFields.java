@@ -58,7 +58,9 @@ public class ExtractFields {
             for (List<String> list: replacements){
                 Integer i = 0;
                 for(String dato: list){
-                    line = line.replaceAll(dato+ "(?!_)", i.toString());
+                    line = line.replaceAll("^"+ dato + ",", i.toString() + ",")
+                            .replaceAll(","+ dato + ",", "," + i.toString() + ",")
+                            .replaceAll(","+ dato + "$", "," + i.toString());
                     i++;
                 }
             }
