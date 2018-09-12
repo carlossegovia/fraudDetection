@@ -52,12 +52,12 @@ public class RandomForestExample {
             Integer maxBins = 32;
             Integer seed = 12345;
 
-//            RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
-//                    categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,
-//                    seed);
+            RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
+                    categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,
+                    seed);
 // Train a DecisionTree model for classification.
-            DecisionTreeModel model = DecisionTree.trainClassifier(trainingData, numClasses,
-                    categoricalFeaturesInfo, impurity, maxDepth, maxBins);
+//            DecisionTreeModel model = DecisionTree.trainClassifier(trainingData, numClasses,
+//                    categoricalFeaturesInfo, impurity, maxDepth, maxBins);
             // Evaluate model on test instances and compute test error
             JavaPairRDD<Object, Object> predictionAndLabel =
                     testData.mapToPair(p -> new Tuple2<>(model.predict(p.features()), p.label()));
