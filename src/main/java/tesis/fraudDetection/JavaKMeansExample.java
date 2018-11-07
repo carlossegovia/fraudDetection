@@ -18,6 +18,9 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import scala.Tuple2;
 
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 // $example off$
 
@@ -29,8 +32,8 @@ public class JavaKMeansExample {
 
         // $example on$
         // Load and parse data
-        String path = "src/main/resources/outputDataTraining.csv";
-        JavaRDD<String> data = jsc.textFile(path);
+        String path = "src/main/resources/inputDataTraining.csv";
+        JavaRDD<String> data = getTransformedData(jsc, path);
         JavaRDD<Vector> parsedData = data.map(s -> {
             String[] sarray = s.split(",");
             double[] values = new double[sarray.length];
@@ -100,5 +103,31 @@ public class JavaKMeansExample {
         System.out.println("Tamaño: " + result.size());
 
         jsc.stop();
+    }
+
+    private static JavaRDD<String> getTransformedData(JavaSparkContext jsc, String path) {
+        int[] columsTypeString = {2, 4, 11, 12, 13, 15, 20, 21};
+        int[] columsTypeDate = {5, 8, 9};
+
+        JavaRDD<String> inputData = jsc.textFile(path);
+        JavaRDD<String> inputParseado = inputData.map(line -> {
+            String[] parts = line.split(",");
+            StringBuilder result = new StringBuilder();
+            SimpleDateFormat formatDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+            //Convertir las fechas a su equivalente en timestamp (long)
+            for (int i : columsTypeDate) {
+                Date date = formatDate.parse(parts[i]);
+                Timestamp timestamp = new Timestamp(date.getTime());
+                parts[i] = String.valueOf(timestamp.getTime());
+            }
+
+            for (int j : columsTypeString) {
+                // Esta función de hash debería de optimizarse (retorna por ejemplo un hash negativo)
+                parts[j] = String.valueOf(parts[j].hashCode());
+            }
+            result.append(String.join(",", parts));
+            return result.toString();
+        });
+        return inputParseado;
     }
 }
