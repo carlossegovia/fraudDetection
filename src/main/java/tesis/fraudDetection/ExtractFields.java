@@ -26,15 +26,16 @@ public class ExtractFields {
         if (args != null && args.length > 0) {
             path = args[0];
         } else {
-            path = "datasets/kddcup.data";
+            path = "datasets/llamadas_062018.csv";
         }
-        int[] columnas = {1,2,3,41};
+        int[] columnas = {2, 4, 11, 12, 13, 15, 20, 21};
+
 //        JavaRDD<LabeledPoint> inputData = MLUtils.loadLibSVMFile(jsc.sc(), path).toJavaRDD();
         JavaRDD<String> inputData = null;
         File file = new File(path);
 
         inputData = jsc.textFile(file.getPath());
-        JavaRDD<String> inputParseado = inputData.map( line -> {
+        JavaRDD<String> inputParseado = inputData.filter(line -> line.split(",").length == 22).map( line -> {
             String[] parts = line.split(",");
             StringBuilder result = new StringBuilder();
             for (int i: columnas){
