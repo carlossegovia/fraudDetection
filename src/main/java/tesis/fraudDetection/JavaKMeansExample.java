@@ -34,37 +34,48 @@ public class JavaKMeansExample {
 
         // $example on$
         // Load and parse data
-        String path = "datasets/llamadas_062018.csv";
-        JavaRDD<String> data = getTransformedData(jsc, path);
+        String path = "src/main/resources/inputData.csv";
+        // data contiene los datos parseados correctamente.
+        JavaRDD<String> data = getTransformedData(jsc, path).cache();
+
+        // Se recorre el rdd y se transforma en un vector de doubles para poder ejecutar el kmeans
         JavaRDD<Vector> parsedData = data.map(s -> {
             String[] sarray = s.split(",");
             double[] values = new double[sarray.length];
             for (int i = 0; i < sarray.length; i++) {
-                try{
+                try {
                     values[i] = Double.parseDouble(sarray[i]);
-                }catch(NumberFormatException e ){
+                } catch (NumberFormatException e) {
+                    // En el caso de que sea un string genera un hash y parsea el resultado
+                    // Se puede dar este caso porque en la columna de líneas por un problema del dataset original
+                    // existen campos como 09082313B0902341 que tienen una "B" en medio
                     values[i] = Double.parseDouble(String.valueOf(sarray[i].hashCode()));
-
                 }
             }
             return Vectors.dense(values);
-        });
-        parsedData.cache();
+        }).cache();
 
-        System.out.println("KDD data row size : " + parsedData.count());
+        // Se libera de la memoria el rdd data.
+        data.unpersist();
+
+        System.out.println("Dataset row size : " + parsedData.count());
         System.out.println("Example data : " + parsedData.first());
 
+        // firstColumn se utiliza para calcular la desviación estandar
         JavaDoubleRDD firstColumn = parsedData.mapToDouble((DoubleFunction<Vector>) t -> {
             // TODO Auto-generated method stub
             return t.apply(0);
-        });
+        }).cache();
 
         final double mean = firstColumn.mean();
         final double stdev = firstColumn.stdev();
 
         System.out.println("Meaning value : " + mean + " Standard deviation : " + stdev + " Max : " + firstColumn.max() + " Min : " + firstColumn.min());
 
+        // Se libera de la memoria el rdd firstColumn
+        firstColumn.unpersist();
 
+        // Se normaliza el dataset
         JavaRDD<Vector>[] filteredParsedDataRDD = parsedData.filter((Function<Vector, Boolean>) v1 -> {
             double src_bytes = v1.apply(0);
             if (src_bytes > (mean - 2 * stdev) && src_bytes < (mean + 2 * stdev)) {
@@ -73,11 +84,17 @@ public class JavaKMeansExample {
             return false;
         }).cache().randomSplit(new double[]{0.8, 0.2});
         JavaRDD<Vector> training = filteredParsedDataRDD[0]; // training set
-        JavaRDD<Vector> test = filteredParsedDataRDD[1]; // test set
+        // JavaRDD<Vector> test = filteredParsedDataRDD[1]; // test set (no se usa)
 
+        // Se libera de la memoria ambos rdds
+        filteredParsedDataRDD[0].unpersist();
+        filteredParsedDataRDD[1].unpersist();
+
+        training.cache();
         System.out.println("Filtered data ...  Count : " + training.count());
         System.out.println("Example data : " + training.first());
 
+        //Se ejecuta kmeans
         final int numClusters = 10;
         final int numIterations = 20;
         KMeansModel clusters = KMeans.train(training.rdd(), numClusters, numIterations);
@@ -101,33 +118,40 @@ public class JavaKMeansExample {
             }
             double distance = Math.sqrt(preDis);
             return new Tuple2<Double, Integer>(distance, centroidIndex);
-        });
+        }).cache();
 
         List<Tuple2<Double, Integer>> result = result1.sortByKey(false).collect();
 
-        //Print top ten points
-        ArrayList<String> results = new ArrayList<>();
+        result1.unpersist();
 
+        //Imprimir las distancias
+        ArrayList<String> results = new ArrayList<>();
         for (Tuple2<Double, Integer> tuple : result) {
             results.add("Distance " + tuple._1());
             clusterCounters[tuple._2()]++;
         }
+
         results.add("Tamaño de entrenamiento: " + training.rdd().count());
-
         results.add("Tamaño de prueba: " + result.size());
+        results.add("Contadores de clusteres");
 
-        results.add("Contadores de clusteres" );
-        int i=0;
-        for (int counter : clusterCounters){
-            results.add("Cluster: " + i + ":  " + counter );
+        // liberar de la memoria el rdd training
+        training.unpersist();
+
+        //Imprimir la cantidad de datos en cada clusters
+        int i = 0;
+        for (int counter : clusterCounters) {
+            results.add("Cluster: " + i + ":  " + counter);
             i++;
         }
 
-
-
-        JavaRDD<String> resultsRdd = jsc.parallelize(results);
+        // Se guardan los resultados.
+        JavaRDD<String> resultsRdd = jsc.parallelize(results).cache();
 
         resultsRdd.coalesce(1).saveAsTextFile("finalResults");
+
+        // liberar de la memoria el rdd training
+        resultsRdd.unpersist();
 
         jsc.stop();
     }
@@ -136,54 +160,78 @@ public class JavaKMeansExample {
         int[] columsTypeString = {2, 4, 11, 12, 13, 15, 20, 21};
         int[] columsTypeDate = {5, 8, 9};
 
-        JavaRDD<String> inputData = jsc.textFile(path);
+        // Los datos en bruto
+        JavaRDD<String> inputData = jsc.textFile(path).cache();
 
-        JavaRDD<String> inputParseado2 = inputData.filter(line -> line.split(",").length == 22).map( line -> {
+        // Se parten los rdd's y los que no tienen 22 columnas se obvian
+        JavaRDD<String> inputStringType = inputData.filter(line -> line.split(",").length == 22).map(line -> {
             String[] parts = line.split(",");
+            // result es el string formado por todas las columnas de tipo string en el dataset original
             StringBuilder result = new StringBuilder();
-            for (int i: columsTypeString){
-                if(result.length() > 0)
+            for (int i : columsTypeString) {
+                if (result.length() > 0)
                     result.append(",");
                 result.append(parts[i]);
             }
             return result.toString();
-        });
+        }).cache();
+
+        // Se forma un Array con todos los diferentes strings encontrados que se van a mapear a un número
         ArrayList<List<String>> replacements = new ArrayList<>();
-        for (int j=0; j<columsTypeString.length; j++){
+        for (int j = 0; j < columsTypeString.length; j++) {
             int finalJ = j;
-            JavaRDD<String> rddTemp = inputParseado2.map(line -> {
+            // Se recorre el rdd generado anteriormente que solo contiene las columnas de tipo string
+            JavaRDD<String> rddTemp = inputStringType.map(line -> {
                 String[] temp = line.split(",");
                 return temp[finalJ];
-            });
-            JavaRDD<String> rddDistinct = rddTemp.distinct();
-            replacements.add(rddDistinct.collect());
+            }).cache();
+
+            // Se libera de la memoria el rdd inputStringType
+            inputStringType.unpersist();
+
+            // El rddTemp contiene los strings que no se repiten, eso se devuelve como lista y se almacena en replacements
+            replacements.add(rddTemp.distinct().collect());
+
+            // Se libera de la memoria el rdd rddTemp
+            rddTemp.unpersist();
         }
-        return inputData.filter(line -> line.split(",").length == 22).map(line -> {
-            for (List<String> list: replacements){
+
+        // Se recorre el dataset para sustituir las columnas de tipo string por el id generado anteriormente y
+        // también sustituir las columnas de tipo Date. De vuelta se ignoran las filas que no tienen todos los campos (22)
+        JavaRDD<String> rddFinal = inputData.filter(line -> line.split(",").length == 22).map(line -> {
+            //Se sustituye cada string contenido en replacements con su correspondiente id que es un number
+            for (List<String> list : replacements) {
                 Integer i = 0;
-                for(String dato: list){
-                    line = line.replaceAll("^"+ dato + ",", i.toString() + ",")
-                            .replaceAll(","+ dato + ",", "," + i.toString() + ",")
-                            .replaceAll(","+ dato + "$", "," + i.toString());
+                for (String dato : list) {
+                    line = line.replaceAll("^" + dato + ",", i.toString() + ",")
+                            .replaceAll("," + dato + ",", "," + i.toString() + ",")
+                            .replaceAll("," + dato + "$", "," + i.toString());
                     i++;
                 }
             }
+            // line ya es equivalente a una fila sin columnas con tipos de datos de string.
             String[] parts = line.split(",");
             StringBuilder result = new StringBuilder();
             SimpleDateFormat formatDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+            Date date;
+            Timestamp timestamp;
             //Convertir las fechas a su equivalente en timestamp (long)
-            try{
+            try {
                 for (int i : columsTypeDate) {
-                    Date date = formatDate.parse(parts[i]);
-                    Timestamp timestamp = new Timestamp(date.getTime());
+                    date = formatDate.parse(parts[i]);
+                    timestamp = new Timestamp(date.getTime());
                     parts[i] = String.valueOf(timestamp.getTime());
                 }
-            }catch(Exception e){
+            } catch (Exception e) {
                 System.out.println(line);
             }
+            // result contiene las filas con todos las columnas con tipos de datos númericos.
             result.append(String.join(",", parts));
-
             return result.toString();
         });
+        // Se libera de la memoria el rdd inputData
+        inputData.unpersist();
+
+        return rddFinal;
     }
 }
