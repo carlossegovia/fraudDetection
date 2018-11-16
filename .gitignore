@@ -14,4 +14,9 @@
 .springBeans
 *.iml
 .idea/
-
+/results/
+/finalresults/
+*/datos.csv
+*/kddcup*
+*/llamadas*
+*/part-*

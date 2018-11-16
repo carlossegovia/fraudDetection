@@ -34,9 +34,9 @@ public class JavaKMeansExample {
 
         // $example on$
         // Load and parse data
-        String path = "src/main/resources/inputData.csv";
+        String path = "datasets/part-00000";
         // data contiene los datos parseados correctamente.
-        JavaRDD<String> data = getTransformedData(jsc, path).cache();
+        JavaRDD<String> data = jsc.textFile(path).cache();
 
         // Se recorre el rdd y se transforma en un vector de doubles para poder ejecutar el kmeans
         JavaRDD<Vector> parsedData = data.map(s -> {
@@ -84,7 +84,7 @@ public class JavaKMeansExample {
             return false;
         }).cache().randomSplit(new double[]{0.8, 0.2});
         JavaRDD<Vector> training = filteredParsedDataRDD[0]; // training set
-        // JavaRDD<Vector> test = filteredParsedDataRDD[1]; // test set (no se usa)
+        JavaRDD<Vector> test = filteredParsedDataRDD[1]; // test set (no se usa)
 
         // Se libera de la memoria ambos rdds
         filteredParsedDataRDD[0].unpersist();
@@ -93,65 +93,69 @@ public class JavaKMeansExample {
         training.cache();
         System.out.println("Filtered data ...  Count : " + training.count());
         System.out.println("Example data : " + training.first());
+        ArrayList<String> results = new ArrayList<>();
 
         //Se ejecuta kmeans
-        final int numClusters = 10;
-        final int numIterations = 20;
-        KMeansModel clusters = KMeans.train(training.rdd(), numClusters, numIterations);
+        for (int numClusters = 10; numClusters < 150; numClusters+=10) {
+            final int numIterations = 10;
+            KMeansModel clusters = KMeans.train(training.rdd(), numClusters, numIterations);
 
 
-        /**
-         * Take cluster centers
-         */
-        Vector[] clusterCenters = clusters.clusterCenters();
-        int[] clusterCounters = new int[numClusters];
-        Arrays.fill(clusterCounters, 0);
+            /**
+             * Take cluster centers
+             */
+            Vector[] clusterCenters = clusters.clusterCenters();
+            int[] clusterCounters = new int[numClusters];
+            Arrays.fill(clusterCounters, 0);
 
-        JavaPairRDD<Double, Integer> result1 = training.mapToPair((PairFunction<Vector, Double, Integer>) point -> {
-            int centroidIndex = clusters.predict(point);  //find centroid index
-            Vector centroid = clusterCenters[centroidIndex]; //get cluster center (centroid) for given point
-            //calculate distance
-            double preDis = 0;
-            for (int i = 0; i < centroid.size(); i++) {
-                preDis = Math.pow((centroid.apply(i) - point.apply(i)), 2);
+            JavaPairRDD<Double, Integer> result1 = test.mapToPair((PairFunction<Vector, Double, Integer>) point -> {
+                int centroidIndex = clusters.predict(point);  //find centroid index
+                Vector centroid = clusterCenters[centroidIndex]; //get cluster center (centroid) for given point
+                //calculate distance
+                double preDis = 0;
+                for (int i = 0; i < centroid.size(); i++) {
+                    preDis = Math.pow((centroid.apply(i) - point.apply(i)), 2);
 
+                }
+                double distance = Math.sqrt(preDis);
+                return new Tuple2<Double, Integer>(distance, centroidIndex);
+            }).cache();
+
+            List<Tuple2<Double, Integer>> result = result1.sortByKey(false).collect();
+
+            result1.unpersist();
+
+            //Imprimir las distancias
+            Double score = 0.0;
+            for (Tuple2<Double, Integer> tuple : result) {
+//                results.add("Distance " + tuple._1());
+                score += tuple._1();
+                clusterCounters[tuple._2()]++;
             }
-            double distance = Math.sqrt(preDis);
-            return new Tuple2<Double, Integer>(distance, centroidIndex);
-        }).cache();
+            results.add("Clustering score: " + (score / result.size()));
+            results.add("Tamaño de entrenamiento: " + training.rdd().count());
+            results.add("Tamaño de prueba: " + result.size());
+            results.add("Contadores de clusteres");
 
-        List<Tuple2<Double, Integer>> result = result1.sortByKey(false).collect();
+            // liberar de la memoria el rdd training
+            training.unpersist();
 
-        result1.unpersist();
+            //Imprimir la cantidad de datos en cada clusters
+            int i = 0;
+            for (int counter : clusterCounters) {
+                results.add("Cluster: " + i + ":  " + counter);
+                i++;
+            }
+            // Se guardan los resultados.
+            JavaRDD<String> resultsRdd = jsc.parallelize(results).cache();
 
-        //Imprimir las distancias
-        ArrayList<String> results = new ArrayList<>();
-        for (Tuple2<Double, Integer> tuple : result) {
-            results.add("Distance " + tuple._1());
-            clusterCounters[tuple._2()]++;
+            resultsRdd.coalesce(1).saveAsTextFile("finalResults/result" + numClusters);
+
+            // liberar de la memoria el rdd training
+            resultsRdd.unpersist();
         }
 
-        results.add("Tamaño de entrenamiento: " + training.rdd().count());
-        results.add("Tamaño de prueba: " + result.size());
-        results.add("Contadores de clusteres");
 
-        // liberar de la memoria el rdd training
-        training.unpersist();
-
-        //Imprimir la cantidad de datos en cada clusters
-        int i = 0;
-        for (int counter : clusterCounters) {
-            results.add("Cluster: " + i + ":  " + counter);
-            i++;
-        }
-
-        // Se guardan los resultados.
-        JavaRDD<String> resultsRdd = jsc.parallelize(results).cache();
-
-        resultsRdd.coalesce(1).saveAsTextFile("finalResults");
-
-        // liberar de la memoria el rdd training
-        resultsRdd.unpersist();
 
         jsc.stop();
     }
