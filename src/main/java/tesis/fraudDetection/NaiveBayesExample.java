@@ -16,7 +16,6 @@ import org.apache.spark.mllib.classification.NaiveBayesModel;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
-import org.spark_project.dmg.pmml.ConfusionMatrix;
 import scala.Tuple2;
 
 import java.io.File;
